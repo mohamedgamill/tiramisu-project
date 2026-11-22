@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>مدير مخزون مشروع التيراميسو</title>
+  <style>
+    :root {
+      --bg: #fdfaf6;
+      --card: #ffffff;
+      --primary: #5c3a21;
+      --primary-light: #8c5a3c;
+      --accent: #d97706;
+      --danger: #dc2626;
+      --danger-bg: #fef2f2;
+      --success: #16a34a;
+      --success-bg: #f0fdf4;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --border: #e5e7eb;
+    }
+    * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    body {
+      margin: 0;
+      padding: 16px;
+      background: var(--bg);
+      color: var(--text);
+    }
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    header {
+      background: linear-gradient(135deg, var(--primary), var(--primary-light));
+      color: white;
+      padding: 20px;
+      border-radius: 16px;
+      margin-bottom: 16px;
+      box-shadow: 0 4px 12px rgba(92, 58, 33, 0.15);
+    }
+    header h1 { margin: 0 0 6px; font-size: 1.5rem; }
+    header p { margin: 0; opacity: 0.9; font-size: 0.95rem; }
+
+    .alert-box {
+      background: var(--danger-bg);
+      border: 1px solid #fecaca;
+      border-right: 5px solid var(--danger);
+      color: #991b1b;
+      padding: 14px 16px;
+      border-radius: 12px;
+      margin-bottom: 16px;
+      display: none;
+    }
+    .alert-box h3 { margin: 0 0 6px; font-size: 1rem; }
+    .alert-box ul { margin: 0; padding-right: 20px; font-size: 0.9rem; }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .stat-card {
+      background: var(--card);
+      padding: 16px;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.03);
+    }
+    .stat-card .label { color: var(--muted); font-size: 0.85rem; margin-bottom: 6px; }
+    .stat-card .value { font-size: 1.7rem; font-weight: bold; color: var(--primary); }
+    .stat-card .sub { font-size: 0.8rem; color: var(--muted); margin-top: 4px; }
+
+    .action-panel {
+      background: var(--card);
+      padding: 18px;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      margin-bottom: 18px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .input-group {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    input[type="number"] {
+      padding: 10px 14px;
+      border: 1px solid #d1d5db;
+      border-radius: 10px;
+      font-size: 1rem;
+      width: 140px;
+    }
+    button {
+      padding: 10px 16px;
+      border: none;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    .btn-primary { background: var(--primary); color: white; }
+    .btn-primary:hover { background: var(--primary-light); }
+    .btn-secondary { background: #f3f4f6; color: var(--text); }
+    .btn-secondary:hover { background: #e5e7eb; }
+    .btn-success { background: var(--success); color: white; padding: 6px 10px; font-size: 0.8rem; }
+    .btn-danger { background: #fee2e2; color: var(--danger); }
+
+    .items-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .item-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 15px;
+      position: relative;
+    }
+    .item-card.low {
+      border-color: #fca5a5;
+      background: #fffafa;
+    }
+    .item-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .item-title { font-weight: bold; font-size: 1.05rem; }
+    .badge {
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: bold;
+    }
+    .badge-ok { background: var(--success-bg); color: var(--success); }
+    .badge-low { background: var(--danger-bg); color: var(--danger); }
+    .item-stock { font-size: 1.25rem; font-weight: bold; margin: 6px 0; }
+    .item-meta { font-size: 0.82rem; color: var(--muted); margin-bottom: 10px; }
+    .item-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+    .history-box {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+    }
+    .history-box h3 { margin: 0 0 10px; font-size: 1.05rem; }
+    .history-list { list-style: none; padding: 0; margin: 0; max-height: 200px; overflow-y: auto; }
+    .history-list li {
+      padding: 8px 0;
+      border-bottom: 1px solid #f3f4f6;
+      font-size: 0.88rem;
+      display: flex;
+      justify-content: space-between;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>🍰 مدير مخزون مشروع التيراميسو</h1>
+    <p>خصم تلقائي للخامات، حساب العلب المتبقية، وتنبيهات النواقص (مضبوط على مقادير وصفتك)</p>
+  </header>
+
+  <div id="alertBox" class="alert-box">
+    <h3>⚠️ تنبيه: خامات قربت تخلص (تكفي 10 علب أو أقل):</h3>
+    <ul id="alertList"></ul>
+  </div>
+
+  <div class="hero-grid">
+    <div class="stat-card">
+      <div class="label">أقصى عدد علب تقدر تعمله حالياً</div>
+      <div class="value" id="maxBoxes">0 علبة</div>
+      <div class="sub" id="limitingItem">بناءً على أقل خامة متوفرة</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">إجمالي العلب المنتجة</div>
+      <div class="value" id="totalProduced">0 علبة</div>
+      <div class="sub">منذ بداية الجرد</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">إجمالي التكلفة التقديرية للمنتج</div>
+      <div class="value" id="totalCost">0 ج.م</div>
+      <div class="sub">على أساس 55 ج.م للعلبة</div>
+    </div>
+  </div>
+
+  <div class="action-panel">
+    <div class="input-group">
+      <label for="producedInput"><strong>عملت كام علبة النهاردة؟</strong></label>
+      <input type="number" id="producedInput" min="1" placeholder="مثلاً: 5" />
+      <button class="btn-primary" onclick="produceBoxes()">خصم من المخزون</button>
+    </div>
+    <div class="input-group">
+      <button class="btn-secondary" onclick="undoLast()">↩️ تراجع عن آخر عملية</button>
+      <button class="btn-danger" onclick="resetTo60()">🔄 إعادة ضبط لرصيد 60 علبة</button>
+    </div>
+  </div>
+
+  <div id="itemsGrid" class="items-grid"></div>
+
+  <div class="history-box">
+    <h3>📋 سجل الإنتاج والمشتريات</h3>
+    <ul id="historyList" class="history-list"></ul>
+  </div>
+</div>
+
+<script>
+  const INITIAL_ITEMS = [
+    { id: 'mascarpone', name: 'جبنة ماسكاربوني', unit: 'جرام', perBox: 45, stock: 2700, packSize: 225, packLabel: '+ عبوة (225 جم)' },
+    { id: 'biscuits', name: 'بسكوت ليدي فينجر', unit: 'بسكوتة', perBox: 2, stock: 120, packSize: 60, packLabel: '+ باكيت (60 بسكوتة)' },
+    { id: 'cream', name: 'كريمة خفق', unit: 'جرام', perBox: 10, stock: 600, packSize: 1000, packLabel: '+ كيلو (1000 جم)' },
+    { id: 'yolks', name: 'صفار بيض', unit: 'صفارة', perBox: 0.4, stock: 24, packSize: 15, packLabel: '+ طبق (15 صفارة)' },
+    { id: 'milk', name: 'لبن (حليب)', unit: 'مل', perBox: 20, stock: 1200, packSize: 1500, packLabel: '+ زجاجة (1.5 لتر)' },
+    { id: 'sugar', name: 'سكر', unit: 'جرام', perBox: 8, stock: 480, packSize: 1000, packLabel: '+ كيلو (1000 جم)' },
+    { id: 'boxes', name: 'علب تيراميسو', unit: 'علبة', perBox: 1, stock: 60, packSize: 30, packLabel: '+ 30 علبة' },
+    { id: 'spoons', name: 'معالق', unit: 'معلقة', perBox: 1, stock: 60, packSize: 30, packLabel: '+ 30 معلقة' },
+    { id: 'stickers', name: 'استيكرات البراند', unit: 'استيكر', perBox: 1, stock: 60, packSize: 30, packLabel: '+ 30 استيكر' }
+  ];
+
+  const STORAGE_KEY = 'tiramisu_inventory_v1';
+  let state = loadState();
+
+  function loadState() {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) {}
+    }
+    return {
+      items: JSON.parse(JSON.stringify(INITIAL_ITEMS)),
+      totalProduced: 0,
+      history: []
+    };
+  }
+
+  function saveState() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }
+
+  function formatNum(n) {
+    return Number.isInteger(n) ? n : Number(n.toFixed(1));
+  }
+
+  function produceBoxes() {
+    const input = document.getElementById('producedInput');
+    const count = parseFloat(input.value);
+    if (!count || count <= 0) {
+      alert('من فضلك أدخل عدد علب صحيح أكبر من صفر');
+      return;
+    }
+
+    const prevSnapshot = JSON.parse(JSON.stringify(state.items));
+    state.items.forEach(item => {
+      item.stock = Math.max(0, Number((item.stock - item.perBox * count).toFixed(2)));
+    });
+    state.totalProduced += count;
+    state.history.unshift({
+      type: 'produce',
+      count,
+      time: new Date().toLocaleString('ar-EG'),
+      snapshot: prevSnapshot
+    });
+
+    input.value = '';
+    saveState();
+    render();
+  }
+
+  function addStock(id, amount, label) {
+    const item = state.items.find(i => i.id === id);
+    if (!item) return;
+    const prevSnapshot = JSON.parse(JSON.stringify(state.items));
+    item.stock = Number((item.stock + amount).toFixed(2));
+    state.history.unshift({
+      type: 'restock',
+      text: `إضافة ${label} (${item.name})`,
+      time: new Date().toLocaleString('ar-EG'),
+      snapshot: prevSnapshot
+    });
+    saveState();
+    render();
+  }
+
+  function customAdd(id) {
+    const item = state.items.find(i => i.id === id);
+    if (!item) return;
+    const val = prompt(`أدخل الكمية المضافة من (${item.name}) بـ ${item.unit}:`);
+    const num = parseFloat(val);
+    if (num && num > 0) {
+      addStock(id, num, `${num} ${item.unit}`);
+    }
+  }
+
+  function undoLast() {
+    if (!state.history.length) {
+      alert('لا توجد عمليات سابقة للتراجع عنها');
+      return;
+    }
+    const last = state.history.shift();
+    state.items = last.snapshot;
+    if (last.type === 'produce') {
+      state.totalProduced = Math.max(0, state.totalProduced - last.count);
+    }
+    saveState();
+    render();
+  }
+
+  function resetTo60() {
+    if (!confirm('هل تريد إعادة ضبط المخزون بالكامل ليكفي 60 علبة؟')) return;
+    state = {
+      items: JSON.parse(JSON.stringify(INITIAL_ITEMS)),
+      totalProduced: 0,
+      history: [{
+        type: 'reset',
+        text: 'إعادة ضبط المخزون الابتدائي (60 علبة)',
+        time: new Date().toLocaleString('ar-EG'),
+        snapshot: JSON.parse(JSON.stringify(INITIAL_ITEMS))
+      }]
+    };
+    saveState();
+    render();
+  }
+
+  function render() {
+    const grid = document.getElementById('itemsGrid');
+    const alertBox = document.getElementById('alertBox');
+    const alertList = document.getElementById('alertList');
+    grid.innerHTML = '';
+    alertList.innerHTML = '';
+
+    let minBoxes = Infinity;
+    let limitingName = '';
+    let lowItems = [];
+
+    state.items.forEach(item => {
+      const possibleBoxes = Math.floor(item.stock / item.perBox);
+      if (possibleBoxes < minBoxes) {
+        minBoxes = possibleBoxes;
+        limitingName = item.name;
+      }
+      const isLow = possibleBoxes <= 10;
+      if (isLow) {
+        lowItems.push(`${item.name}: متبقي ${formatNum(item.stock)} ${item.unit} (يكفي ${possibleBoxes} علبة فقط)`);
+      }
+
+      const card = document.createElement('div');
+      card.className = 'item-card' + (isLow ? ' low' : '');
+      card.innerHTML = `
+        <div class="item-header">
+          <span class="item-title">${item.name}</span>
+          <span class="badge ${isLow ? 'badge-low' : 'badge-ok'}">يكفي ${possibleBoxes} علبة</span>
+        </div>
+        <div class="item-stock">${formatNum(item.stock)} ${item.unit}</div>
+        <div class="item-meta">الاستهلاك للعلبة: ${item.perBox} ${item.unit}</div>
+        <div class="item-actions">
+          <button class="btn-success" onclick="addStock('${item.id}', ${item.packSize}, '${item.packLabel}')">${item.packLabel}</button>
+          <button class="btn-secondary" style="padding:6px 10px;font-size:0.8rem;" onclick="customAdd('${item.id}')">+ كمية مخصصة</button>
+        </div>
+      `;
+      grid.appendChild(card);
+    });
+
+    if (lowItems.length > 0) {
+      alertBox.style.display = 'block';
+      lowItems.forEach(txt => {
+        const li = document.createElement('li');
+        li.textContent = txt;
+        alertList.appendChild(li);
+      });
+    } else {
+      alertBox.style.display = 'none';
+    }
+
+    document.getElementById('maxBoxes').textContent = `${minBoxes === Infinity ? 0 : minBoxes} علبة`;
+    document.getElementById('limitingItem').textContent = limitingName ? `أقل خامة: ${limitingName}` : '';
+    document.getElementById('totalProduced').textContent = `${state.totalProduced} علبة`;
+    document.getElementById('totalCost').textContent = `${(state.totalProduced * 55).toLocaleString('ar-EG')} ج.م`;
+
+    const historyList = document.getElementById('historyList');
+    historyList.innerHTML = '';
+    if (!state.history.length) {
+      historyList.innerHTML = '<li style="color:#6b7280;">لا توجد عمليات مسجلة بعد.</li>';
+    } else {
+      state.history.forEach(h => {
+        const li = document.createElement('li');
+        const label = h.type === 'produce' ? `✅ إنتاج ${h.count} علبة تيراميسو` : `📦 ${h.text}`;
+        li.innerHTML = `<span>${label}</span><span style="color:#6b7280;font-size:0.8rem;">${h.time}</span>`;
+        historyList.appendChild(li);
+      });
+    }
+  }
+
+  render();
+</script>
+</body>
+</html>
