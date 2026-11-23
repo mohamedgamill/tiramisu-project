@@ -148,5 +148,12 @@ export async function onRequest(context) {
     return loginPage();
   }
 
-  return next();
+  // الصفحات (HTML) ما تتخزنش في المتصفح، علشان أي تحديث يظهر على طول.
+  const response = await next();
+  if ((response.headers.get('Content-Type') || '').includes('text/html')) {
+    const fresh = new Response(response.body, response);
+    fresh.headers.set('Cache-Control', 'no-cache, must-revalidate');
+    return fresh;
+  }
+  return response;
 }
