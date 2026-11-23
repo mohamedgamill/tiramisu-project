@@ -259,7 +259,27 @@
   let busy = false;     // فيه عملية حفظ شغالة دلوقتي
 
   function freshState() {
-    return { items: JSON.parse(JSON.stringify(INITIAL_ITEMS)), totalProduced: 0, history: [] };
+    return normalize({ items: JSON.parse(JSON.stringify(INITIAL_ITEMS)), totalProduced: 0, history: [] });
+  }
+
+  // كل خامة ليها قايمة أحجام عبوات (packs). البيانات القديمة كان فيها حجم واحد بس.
+  function normalize(s) {
+    if (!s || !Array.isArray(s.items)) return s;
+    s.items.forEach(item => {
+      if (!Array.isArray(item.packs)) {
+        item.packs = item.packSize ? [{ size: item.packSize, label: item.packLabel || `${item.packSize} ${item.unit}` }] : [];
+      }
+      item.packs.forEach(p => { p.label = String(p.label).replace(/^\s*\+\s*/, ''); });
+    });
+    return s;
+  }
+
+  function escapeHtml(text) {
+    return String(text).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  function parseNumber(val) {
+    return parseFloat(String(val).trim().replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace('٫', '.'));
   }
 
   function setStatus(text, isError = false) {
@@ -307,7 +327,7 @@
         return true;
       }
       if (status === 409) {
-        state = data.state;
+        state = normalize(data.state);
         version = data.version;
         render();
         setStatus('✅ اتحدّثت البيانات من جهاز تاني');
@@ -338,7 +358,7 @@
       }
       if (data.state) {
         if (data.version !== version) {
-          state = data.state;
+          state = normalize(data.state);
           version = data.version;
           render();
         }
@@ -348,7 +368,7 @@
         let initial = freshState();
         try {
           const old = JSON.parse(localStorage.getItem(OLD_LOCAL_KEY));
-          if (old && Array.isArray(old.items)) initial = old;
+          if (old && Array.isArray(old.items)) initial = normalize(old);
         } catch (e) {}
         state = freshState();
         version = 0;
@@ -403,12 +423,84 @@
     });
   }
 
+  // زرار حجم عبوة: يضيف الحجم ده للمخزون
+  function addPack(id, index) {
+    if (busy) return;
+    const item = state.items.find(i => i.id === id);
+    const pack = item && item.packs[index];
+    if (!pack) return;
+    addStock(id, pack.size, pack.label);
+  }
+
+  function newPack(id) {
+    if (busy) return;
+    const item = state.items.find(i => i.id === id);
+    if (!item) return;
+    const sizeVal = prompt(`حجم العبوة الجديدة من (${item.name}) كام ${item.unit}؟\nمثلاً: 500`);
+    if (sizeVal === null) return;
+    const size = parseNumber(sizeVal);
+    if (isNaN(size) || size <= 0) {
+      alert('من فضلك اكتب رقم أكبر من صفر');
+      return;
+    }
+    if (item.packs.some(p => p.size === size)) {
+      alert(`فيه حجم ${formatNum(size)} ${item.unit} موجود بالفعل`);
+      return;
+    }
+    const defaultLabel = `${formatNum(size)} ${item.unit}`;
+    const labelVal = prompt('اسم الزرار (ممكن تسيبه زي ما هو):', defaultLabel);
+    if (labelVal === null) return;
+    const label = labelVal.trim().slice(0, 40) || defaultLabel;
+    commit(s => {
+      const target = s.items.find(i => i.id === id);
+      if (!target) return;
+      const prevSnapshot = JSON.parse(JSON.stringify(s.items));
+      target.packs.push({ size: Number(size.toFixed(2)), label });
+      target.packs.sort((a, b) => a.size - b.size);
+      s.history.unshift({
+        type: 'edit',
+        text: `إضافة حجم عبوة جديد لـ ${target.name}: ${label}`,
+        time: new Date().toLocaleString('ar-EG'),
+        snapshot: prevSnapshot
+      });
+    });
+  }
+
+  function removePack(id) {
+    if (busy) return;
+    const item = state.items.find(i => i.id === id);
+    if (!item || !item.packs.length) return;
+    const list = item.packs.map((p, i) => `${i + 1}) ${p.label}`).join('\n');
+    const val = prompt(`أحجام ${item.name}:\n${list}\n\nاكتب رقم الحجم اللي عايز تمسحه:`);
+    if (val === null) return;
+    const index = parseNumber(val) - 1;
+    if (!Number.isInteger(index) || index < 0 || index >= item.packs.length) {
+      alert('رقم غلط، اكتب رقم من القايمة');
+      return;
+    }
+    const label = item.packs[index].label;
+    if (!confirm(`متأكد إنك عايز تمسح حجم "${label}"؟`)) return;
+    commit(s => {
+      const target = s.items.find(i => i.id === id);
+      if (!target) return;
+      const prevSnapshot = JSON.parse(JSON.stringify(s.items));
+      target.packs.splice(index, 1);
+      s.history.unshift({
+        type: 'edit',
+        text: `حذف حجم عبوة من ${target.name}: ${label}`,
+        time: new Date().toLocaleString('ar-EG'),
+        snapshot: prevSnapshot
+      });
+    });
+  }
+
   function customAdd(id) {
     if (busy) return;
     const item = state.items.find(i => i.id === id);
     if (!item) return;
     const val = prompt(`أدخل الكمية المضافة من (${item.name}) بـ ${item.unit}:`);
-    const num = parseFloat(val);
+    if (val === null) return;
+    const num = parseNumber(val);
     if (num && num > 0) {
       addStock(id, num, `${num} ${item.unit}`);
     }
@@ -420,7 +512,7 @@
     if (!item) return;
     const val = prompt(`اكتب الكمية الموجودة فعلاً من (${item.name}) بـ ${item.unit}:\n(الكمية الحالية: ${formatNum(item.stock)})`, formatNum(item.stock));
     if (val === null) return; // داس إلغاء
-    const num = parseFloat(String(val).trim().replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace('٫', '.'));
+    const num = parseNumber(val);
     if (isNaN(num) || num < 0) {
       alert('من فضلك اكتب رقم صحيح (صفر أو أكبر)');
       return;
@@ -459,7 +551,11 @@
     if (busy) return;
     if (!confirm('هل تريد إعادة ضبط المخزون بالكامل ليكفي 60 علبة؟')) return;
     commit(s => {
-      s.items = JSON.parse(JSON.stringify(INITIAL_ITEMS));
+      // نرجّع الكميات للبداية، بس نحتفظ بأحجام العبوات اللي اتضافت
+      const oldPacks = {};
+      s.items.forEach(i => { oldPacks[i.id] = i.packs; });
+      s.items = normalize({ items: JSON.parse(JSON.stringify(INITIAL_ITEMS)) }).items;
+      s.items.forEach(i => { if (oldPacks[i.id]) i.packs = oldPacks[i.id]; });
       s.totalProduced = 0;
       s.history = [{
         type: 'reset',
@@ -505,8 +601,12 @@
         </div>
         <div class="item-stock">${formatNum(item.stock)} ${item.unit}</div>
         <div class="item-meta">الاستهلاك للعلبة: ${item.perBox} ${item.unit}</div>
+        <div class="item-actions" style="margin-bottom:6px;">
+          ${item.packs.map((p, i) => `<button class="btn-success" onclick="addPack('${item.id}', ${i})">+ ${escapeHtml(p.label)}</button>`).join('')}
+          <button class="btn-secondary" style="padding:6px 10px;font-size:0.8rem;" onclick="newPack('${item.id}')">➕ حجم جديد</button>
+          ${item.packs.length ? `<button class="btn-secondary" style="padding:6px 10px;font-size:0.8rem;" onclick="removePack('${item.id}')">🗑️ حذف حجم</button>` : ''}
+        </div>
         <div class="item-actions">
-          <button class="btn-success" onclick="addStock('${item.id}', ${item.packSize}, '${item.packLabel}')">${item.packLabel}</button>
           <button class="btn-secondary" style="padding:6px 10px;font-size:0.8rem;" onclick="customAdd('${item.id}')">+ كمية مخصصة</button>
           <button class="btn-secondary" style="padding:6px 10px;font-size:0.8rem;" onclick="editStock('${item.id}')">✏️ تعديل الكمية</button>
         </div>
@@ -538,10 +638,10 @@
       state.history.forEach(h => {
         const li = document.createElement('li');
         const label = h.type === 'produce' ? `✅ إنتاج ${h.count} علبة تيراميسو`
-                    : h.type === 'edit' ? `✏️ ${h.text}`
-                    : `📦 ${h.text}`;
+                    : h.type === 'edit' ? `✏️ ${escapeHtml(h.text)}`
+                    : `📦 ${escapeHtml(h.text)}`;
         const by = h.by ? ` <small style="color:#8c5a3c;">(بواسطة ${h.by})</small>` : '';
-        li.innerHTML = `<span>${label}${by}</span><span style="color:#6b7280;font-size:0.8rem;">${h.time}</span>`;
+        li.innerHTML = `<span>${label}${by}</span><span style="color:#6b7280;font-size:0.8rem;">${escapeHtml(h.time)}</span>`;
         historyList.appendChild(li);
       });
     }
