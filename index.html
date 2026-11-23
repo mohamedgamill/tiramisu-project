@@ -163,14 +163,34 @@
       display: flex;
       justify-content: space-between;
     }
+
+    .header-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+    .logout-btn {
+      background: rgba(255,255,255,0.18); color: white; padding: 6px 12px;
+      font-size: 0.82rem; white-space: nowrap;
+    }
+    .logout-btn:hover { background: rgba(255,255,255,0.3); }
+    .sync-status { margin-top: 10px; font-size: 0.82rem; opacity: 0.95; }
+    .sync-status.error { background: #fef2f2; color: #991b1b; display: inline-block; padding: 3px 10px; border-radius: 999px; }
+    .loading { text-align: center; padding: 40px 16px; color: var(--muted); }
+    body.busy button { opacity: 0.6; pointer-events: none; }
   </style>
 </head>
 <body>
 <div class="container">
   <header>
-    <h1>🍰 مدير مخزون مشروع التيراميسو</h1>
+    <div class="header-top">
+      <h1>🍰 مدير مخزون مشروع التيراميسو</h1>
+      <form method="POST" action="/api/logout">
+        <button type="submit" class="logout-btn">🚪 خروج</button>
+      </form>
+    </div>
     <p>خصم تلقائي للخامات، حساب العلب المتبقية، وتنبيهات النواقص (مضبوط على مقادير وصفتك)</p>
+    <div id="syncStatus" class="sync-status">⏳ جاري تحميل البيانات...</div>
   </header>
+
+  <div id="loadingBox" class="loading">⏳ جاري تحميل البيانات من السيرفر...</div>
+  <div id="appContent" style="display:none;">
 
   <div id="alertBox" class="alert-box">
     <h3>⚠️ تنبيه: خامات قربت تخلص (تكفي 10 علب أو أقل):</h3>
@@ -213,6 +233,7 @@
     <h3>📋 سجل الإنتاج والمشتريات</h3>
     <ul id="historyList" class="history-list"></ul>
   </div>
+  </div>
 </div>
 
 <script>
@@ -228,30 +249,122 @@
     { id: 'stickers', name: 'استيكرات البراند', unit: 'استيكر', perBox: 1, stock: 60, packSize: 30, packLabel: '+ 30 استيكر' }
   ];
 
-  const STORAGE_KEY = 'tiramisu_inventory_v1';
-  let state = loadState();
+  // البيانات القديمة اللي كانت محفوظة في المتصفح (بتتنقل للسيرفر أول مرة بس)
+  const OLD_LOCAL_KEY = 'tiramisu_inventory_v1';
+  const MAX_HISTORY = 300;
+  const REFRESH_EVERY_MS = 30000;
 
-  function loadState() {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) {}
-    }
-    return {
-      items: JSON.parse(JSON.stringify(INITIAL_ITEMS)),
-      totalProduced: 0,
-      history: []
-    };
+  let state = null;     // البيانات الحالية (نفس اللي على السيرفر)
+  let version = 0;      // رقم النسخة على السيرفر
+  let busy = false;     // فيه عملية حفظ شغالة دلوقتي
+
+  function freshState() {
+    return { items: JSON.parse(JSON.stringify(INITIAL_ITEMS)), totalProduced: 0, history: [] };
   }
 
-  function saveState() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  function setStatus(text, isError = false) {
+    const el = document.getElementById('syncStatus');
+    el.textContent = text;
+    el.className = 'sync-status' + (isError ? ' error' : '');
+  }
+
+  function setBusy(value) {
+    busy = value;
+    document.body.classList.toggle('busy', value);
+  }
+
+  async function api(method, body) {
+    const res = await fetch('/api/state', {
+      method,
+      cache: 'no-store',
+      headers: body ? { 'Content-Type': 'application/json' } : {},
+      body: body ? JSON.stringify(body) : undefined
+    });
+    if (res.status === 401) {
+      location.reload(); // انتهى تسجيل الدخول: يرجع لصفحة كلمة السر
+      throw new Error('unauthorized');
+    }
+    const data = await res.json().catch(() => ({}));
+    return { status: res.status, data };
+  }
+
+  // يحفظ تعديل على السيرفر. البيانات على الشاشة مش بتتغير غير لما الحفظ ينجح.
+  async function commit(mutate) {
+    if (busy || !state) return false;
+    const draft = JSON.parse(JSON.stringify(state));
+    mutate(draft);
+    draft.history = draft.history.slice(0, MAX_HISTORY);
+
+    setBusy(true);
+    setStatus('⏳ جاري الحفظ...');
+    try {
+      const { status, data } = await api('PUT', { state: draft, version });
+      if (status === 200) {
+        state = draft;
+        version = data.version;
+        render();
+        setStatus('✅ محفوظ ومتزامن مع كل الأجهزة');
+        return true;
+      }
+      if (status === 409) {
+        state = data.state;
+        version = data.version;
+        render();
+        setStatus('✅ اتحدّثت البيانات من جهاز تاني');
+        alert('البيانات اتغيّرت من جهاز تاني قبل ما تحفظ، والشاشة اتحدّثت بآخر أرقام.\nلو لسه محتاج العملية دي، اعملها تاني.');
+        return false;
+      }
+      setStatus('⚠️ حصلت مشكلة في الحفظ', true);
+      alert('حصلت مشكلة في الحفظ، والعملية متسجّلتش. جرّب تاني بعد شوية.');
+    } catch (e) {
+      if (e.message !== 'unauthorized') {
+        setStatus('⚠️ مفيش اتصال بالإنترنت', true);
+        alert('مفيش اتصال بالإنترنت، والعملية متسجّلتش. اتأكد من النت وجرّب تاني.');
+      }
+    } finally {
+      setBusy(false);
+    }
+    return false;
+  }
+
+  // يجيب آخر بيانات من السيرفر (عند الفتح، وكل شوية، ولما ترجع للصفحة)
+  async function refreshFromServer() {
+    if (busy) return;
+    try {
+      const { status, data } = await api('GET');
+      if (status !== 200) {
+        setStatus('⚠️ مش قادر يوصل لقاعدة البيانات', true);
+        return;
+      }
+      if (data.state) {
+        if (data.version !== version) {
+          state = data.state;
+          version = data.version;
+          render();
+        }
+        setStatus('✅ محفوظ ومتزامن مع كل الأجهزة');
+      } else if (!state) {
+        // أول مرة خالص: ننقل بيانات المتصفح القديمة (لو موجودة) للسيرفر
+        let initial = freshState();
+        try {
+          const old = JSON.parse(localStorage.getItem(OLD_LOCAL_KEY));
+          if (old && Array.isArray(old.items)) initial = old;
+        } catch (e) {}
+        state = freshState();
+        version = 0;
+        render();
+        await commit(draft => Object.assign(draft, initial));
+      }
+    } catch (e) {
+      if (e.message !== 'unauthorized') setStatus('⚠️ مفيش اتصال بالإنترنت', true);
+    }
   }
 
   function formatNum(n) {
     return Number.isInteger(n) ? n : Number(n.toFixed(1));
   }
 
-  function produceBoxes() {
+  async function produceBoxes() {
     const input = document.getElementById('producedInput');
     const count = parseFloat(input.value);
     if (!count || count <= 0) {
@@ -259,39 +372,39 @@
       return;
     }
 
-    const prevSnapshot = JSON.parse(JSON.stringify(state.items));
-    state.items.forEach(item => {
-      item.stock = Math.max(0, Number((item.stock - item.perBox * count).toFixed(2)));
+    const ok = await commit(s => {
+      const prevSnapshot = JSON.parse(JSON.stringify(s.items));
+      s.items.forEach(item => {
+        item.stock = Math.max(0, Number((item.stock - item.perBox * count).toFixed(2)));
+      });
+      s.totalProduced += count;
+      s.history.unshift({
+        type: 'produce',
+        count,
+        time: new Date().toLocaleString('ar-EG'),
+        snapshot: prevSnapshot
+      });
     });
-    state.totalProduced += count;
-    state.history.unshift({
-      type: 'produce',
-      count,
-      time: new Date().toLocaleString('ar-EG'),
-      snapshot: prevSnapshot
-    });
-
-    input.value = '';
-    saveState();
-    render();
+    if (ok) input.value = '';
   }
 
   function addStock(id, amount, label) {
-    const item = state.items.find(i => i.id === id);
-    if (!item) return;
-    const prevSnapshot = JSON.parse(JSON.stringify(state.items));
-    item.stock = Number((item.stock + amount).toFixed(2));
-    state.history.unshift({
-      type: 'restock',
-      text: `إضافة ${label} (${item.name})`,
-      time: new Date().toLocaleString('ar-EG'),
-      snapshot: prevSnapshot
+    commit(s => {
+      const item = s.items.find(i => i.id === id);
+      if (!item) return;
+      const prevSnapshot = JSON.parse(JSON.stringify(s.items));
+      item.stock = Number((item.stock + amount).toFixed(2));
+      s.history.unshift({
+        type: 'restock',
+        text: `إضافة ${label} (${item.name})`,
+        time: new Date().toLocaleString('ar-EG'),
+        snapshot: prevSnapshot
+      });
     });
-    saveState();
-    render();
   }
 
   function customAdd(id) {
+    if (busy) return;
     const item = state.items.find(i => i.id === id);
     if (!item) return;
     const val = prompt(`أدخل الكمية المضافة من (${item.name}) بـ ${item.unit}:`);
@@ -306,32 +419,35 @@
       alert('لا توجد عمليات سابقة للتراجع عنها');
       return;
     }
-    const last = state.history.shift();
-    state.items = last.snapshot;
-    if (last.type === 'produce') {
-      state.totalProduced = Math.max(0, state.totalProduced - last.count);
-    }
-    saveState();
-    render();
+    commit(s => {
+      const last = s.history.shift();
+      s.items = last.snapshot;
+      if (last.type === 'produce') {
+        s.totalProduced = Math.max(0, s.totalProduced - last.count);
+      }
+    });
   }
 
   function resetTo60() {
+    if (busy) return;
     if (!confirm('هل تريد إعادة ضبط المخزون بالكامل ليكفي 60 علبة؟')) return;
-    state = {
-      items: JSON.parse(JSON.stringify(INITIAL_ITEMS)),
-      totalProduced: 0,
-      history: [{
+    commit(s => {
+      s.items = JSON.parse(JSON.stringify(INITIAL_ITEMS));
+      s.totalProduced = 0;
+      s.history = [{
         type: 'reset',
         text: 'إعادة ضبط المخزون الابتدائي (60 علبة)',
         time: new Date().toLocaleString('ar-EG'),
         snapshot: JSON.parse(JSON.stringify(INITIAL_ITEMS))
-      }]
-    };
-    saveState();
-    render();
+      }];
+    });
   }
 
   function render() {
+    if (!state) return;
+    document.getElementById('loadingBox').style.display = 'none';
+    document.getElementById('appContent').style.display = '';
+
     const grid = document.getElementById('itemsGrid');
     const alertBox = document.getElementById('alertBox');
     const alertList = document.getElementById('alertList');
@@ -400,7 +516,11 @@
     }
   }
 
-  render();
+  refreshFromServer();
+  setInterval(refreshFromServer, REFRESH_EVERY_MS);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') refreshFromServer();
+  });
 </script>
 </body>
 </html>
