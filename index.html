@@ -414,6 +414,33 @@
     }
   }
 
+  function editStock(id) {
+    if (busy) return;
+    const item = state.items.find(i => i.id === id);
+    if (!item) return;
+    const val = prompt(`اكتب الكمية الموجودة فعلاً من (${item.name}) بـ ${item.unit}:\n(الكمية الحالية: ${formatNum(item.stock)})`, formatNum(item.stock));
+    if (val === null) return; // داس إلغاء
+    const num = parseFloat(String(val).trim().replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace('٫', '.'));
+    if (isNaN(num) || num < 0) {
+      alert('من فضلك اكتب رقم صحيح (صفر أو أكبر)');
+      return;
+    }
+    if (num === item.stock) return;
+    commit(s => {
+      const target = s.items.find(i => i.id === id);
+      if (!target) return;
+      const prevSnapshot = JSON.parse(JSON.stringify(s.items));
+      const oldStock = target.stock;
+      target.stock = Number(num.toFixed(2));
+      s.history.unshift({
+        type: 'edit',
+        text: `تعديل ${target.name}: من ${formatNum(oldStock)} إلى ${formatNum(target.stock)} ${target.unit}`,
+        time: new Date().toLocaleString('ar-EG'),
+        snapshot: prevSnapshot
+      });
+    });
+  }
+
   function undoLast() {
     if (!state.history.length) {
       alert('لا توجد عمليات سابقة للتراجع عنها');
@@ -481,6 +508,7 @@
         <div class="item-actions">
           <button class="btn-success" onclick="addStock('${item.id}', ${item.packSize}, '${item.packLabel}')">${item.packLabel}</button>
           <button class="btn-secondary" style="padding:6px 10px;font-size:0.8rem;" onclick="customAdd('${item.id}')">+ كمية مخصصة</button>
+          <button class="btn-secondary" style="padding:6px 10px;font-size:0.8rem;" onclick="editStock('${item.id}')">✏️ تعديل الكمية</button>
         </div>
       `;
       grid.appendChild(card);
@@ -509,7 +537,9 @@
     } else {
       state.history.forEach(h => {
         const li = document.createElement('li');
-        const label = h.type === 'produce' ? `✅ إنتاج ${h.count} علبة تيراميسو` : `📦 ${h.text}`;
+        const label = h.type === 'produce' ? `✅ إنتاج ${h.count} علبة تيراميسو`
+                    : h.type === 'edit' ? `✏️ ${h.text}`
+                    : `📦 ${h.text}`;
         li.innerHTML = `<span>${label}</span><span style="color:#6b7280;font-size:0.8rem;">${h.time}</span>`;
         historyList.appendChild(li);
       });
