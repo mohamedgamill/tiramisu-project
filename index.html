@@ -540,7 +540,8 @@
         const label = h.type === 'produce' ? `✅ إنتاج ${h.count} علبة تيراميسو`
                     : h.type === 'edit' ? `✏️ ${h.text}`
                     : `📦 ${h.text}`;
-        li.innerHTML = `<span>${label}</span><span style="color:#6b7280;font-size:0.8rem;">${h.time}</span>`;
+        const by = h.by ? ` <small style="color:#8c5a3c;">(بواسطة ${h.by})</small>` : '';
+        li.innerHTML = `<span>${label}${by}</span><span style="color:#6b7280;font-size:0.8rem;">${h.time}</span>`;
         historyList.appendChild(li);
       });
     }

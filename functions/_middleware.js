@@ -132,6 +132,17 @@ export async function onRequest(context) {
     });
   }
 
+  // دخول Claude: مفتاح منفصل (API_TOKEN في Cloudflare) لـ /api/state بس.
+  // لو اتمسح من Cloudflare، الدخول ده يتقفل فورًا.
+  const auth = request.headers.get('Authorization') || '';
+  if (env.API_TOKEN && url.pathname === '/api/state' && auth.startsWith('Bearer ')) {
+    const given = auth.slice(7).trim();
+    if (safeEqual(await hmac('api-check', given), await hmac('api-check', env.API_TOKEN))) {
+      return next();
+    }
+    return json({ error: 'unauthorized' }, 401);
+  }
+
   if (!(await isValidToken(secret, getCookie(request, COOKIE_NAME)))) {
     if (url.pathname.startsWith('/api/')) return json({ error: 'unauthorized' }, 401);
     return loginPage();
