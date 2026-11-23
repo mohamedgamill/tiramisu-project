@@ -280,7 +280,7 @@
   function normalize(s) {
     if (!s || !Array.isArray(s.items)) return s;
     if (!s.settings || typeof s.settings !== 'object') s.settings = {};
-    if (typeof s.settings.costPerBox !== 'number') s.settings.costPerBox = 55;
+    if (typeof s.settings.costPerBox !== 'number') s.settings.costPerBox = 53.8;
     if (typeof s.settings.pricePerBox !== 'number') s.settings.pricePerBox = null;
     if (typeof s.totalProfit !== 'number') s.totalProfit = 0;
     s.items.forEach(item => {
