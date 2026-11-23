@@ -172,6 +172,12 @@
     .logout-btn:hover { background: rgba(255,255,255,0.3); }
     .sync-status { margin-top: 10px; font-size: 0.82rem; opacity: 0.95; }
     .sync-status.error { background: #fef2f2; color: #991b1b; display: inline-block; padding: 3px 10px; border-radius: 999px; }
+    .profit-result {
+      background: var(--success-bg); border: 1px solid #bbf7d0; border-right: 5px solid var(--success);
+      color: #14532d; padding: 14px 16px; border-radius: 12px; margin-bottom: 16px; line-height: 1.8;
+    }
+    .profit-result.loss { background: var(--danger-bg); border-color: #fecaca; border-right-color: var(--danger); color: #991b1b; }
+    .profit-result .big { font-size: 1.3rem; font-weight: bold; }
     .loading { text-align: center; padding: 40px 16px; color: var(--muted); }
     body.busy button { opacity: 0.6; pointer-events: none; }
   </style>
@@ -211,7 +217,12 @@
     <div class="stat-card">
       <div class="label">إجمالي التكلفة التقديرية للمنتج</div>
       <div class="value" id="totalCost">0 ج.م</div>
-      <div class="sub">على أساس 55 ج.م للعلبة</div>
+      <div class="sub" id="costSub">على أساس 55 ج.م للعلبة</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">💰 إجمالي صافي الربح</div>
+      <div class="value" id="totalProfit" style="color:var(--success);">0 ج.م</div>
+      <div class="sub" id="profitSub">حدد سعر البيع من زرار ⚙️ السعر والتكلفة</div>
     </div>
   </div>
 
@@ -222,10 +233,13 @@
       <button class="btn-primary" onclick="produceBoxes()">خصم من المخزون</button>
     </div>
     <div class="input-group">
+      <button class="btn-secondary" onclick="editPrices()">⚙️ السعر والتكلفة</button>
       <button class="btn-secondary" onclick="undoLast()">↩️ تراجع عن آخر عملية</button>
       <button class="btn-danger" onclick="resetTo60()">🔄 إعادة ضبط لرصيد 60 علبة</button>
     </div>
   </div>
+
+  <div id="profitResult" class="profit-result" style="display:none;"></div>
 
   <div id="itemsGrid" class="items-grid"></div>
 
@@ -265,6 +279,10 @@
   // كل خامة ليها قايمة أحجام عبوات (packs). البيانات القديمة كان فيها حجم واحد بس.
   function normalize(s) {
     if (!s || !Array.isArray(s.items)) return s;
+    if (!s.settings || typeof s.settings !== 'object') s.settings = {};
+    if (typeof s.settings.costPerBox !== 'number') s.settings.costPerBox = 55;
+    if (typeof s.settings.pricePerBox !== 'number') s.settings.pricePerBox = null;
+    if (typeof s.totalProfit !== 'number') s.totalProfit = 0;
     s.items.forEach(item => {
       if (!Array.isArray(item.packs)) {
         item.packs = item.packSize ? [{ size: item.packSize, label: item.packLabel || `${item.packSize} ${item.unit}` }] : [];
@@ -313,6 +331,7 @@
     if (busy || !state) return false;
     const draft = JSON.parse(JSON.stringify(state));
     mutate(draft);
+    normalize(draft); // مثلاً بعد التراجع لنسخة قديمة من غير أحجام عبوات
     draft.history = draft.history.slice(0, MAX_HISTORY);
 
     setBusy(true);
@@ -384,28 +403,102 @@
     return Number.isInteger(n) ? n : Number(n.toFixed(1));
   }
 
+  function money(n) {
+    return `${Number(n.toFixed(2)).toLocaleString('ar-EG')} ج.م`;
+  }
+
+  function askPrice(current) {
+    const val = prompt('بتبيع العلبة الواحدة بكام جنيه؟', current ?? '');
+    if (val === null) return null;
+    const num = parseNumber(val);
+    if (isNaN(num) || num <= 0) {
+      alert('من فضلك اكتب سعر أكبر من صفر');
+      return null;
+    }
+    return Number(num.toFixed(2));
+  }
+
   async function produceBoxes() {
+    if (busy) return;
     const input = document.getElementById('producedInput');
-    const count = parseFloat(input.value);
+    const count = parseNumber(input.value);
     if (!count || count <= 0) {
       alert('من فضلك أدخل عدد علب صحيح أكبر من صفر');
       return;
     }
 
+    let price = state.settings.pricePerBox;
+    if (!price) {
+      price = askPrice();
+      if (!price) return;
+    }
+    const cost = state.settings.costPerBox;
+    const revenue = Number((count * price).toFixed(2));
+    const totalCost = Number((count * cost).toFixed(2));
+    const profit = Number((revenue - totalCost).toFixed(2));
+
     const ok = await commit(s => {
       const prevSnapshot = JSON.parse(JSON.stringify(s.items));
+      const prevSettings = JSON.parse(JSON.stringify(s.settings));
+      s.settings.pricePerBox = price;
       s.items.forEach(item => {
         item.stock = Math.max(0, Number((item.stock - item.perBox * count).toFixed(2)));
       });
       s.totalProduced += count;
+      s.totalProfit = Number((s.totalProfit + profit).toFixed(2));
       s.history.unshift({
         type: 'produce',
         count,
+        price,
+        cost,
+        profit,
         time: new Date().toLocaleString('ar-EG'),
-        snapshot: prevSnapshot
+        snapshot: prevSnapshot,
+        settingsSnapshot: prevSettings
       });
     });
-    if (ok) input.value = '';
+    if (ok) {
+      input.value = '';
+      showProfit(count, price, cost, revenue, totalCost, profit);
+    }
+  }
+
+  function showProfit(count, price, cost, revenue, totalCost, profit) {
+    const box = document.getElementById('profitResult');
+    box.className = 'profit-result' + (profit < 0 ? ' loss' : '');
+    box.innerHTML = `
+      ✅ <strong>اتسجّل إنتاج ${formatNum(count)} علبة</strong><br>
+      المبيعات: ${formatNum(count)} × ${money(price)} = <strong>${money(revenue)}</strong><br>
+      التكلفة: ${formatNum(count)} × ${money(cost)} = <strong>${money(totalCost)}</strong><br>
+      <span class="big">${profit < 0 ? '⚠️ خسارة' : '💰 صافي الربح'}: ${money(Math.abs(profit))}</span>`;
+    box.style.display = 'block';
+    box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function editPrices() {
+    if (busy) return;
+    const price = askPrice(state.settings.pricePerBox);
+    if (!price) return;
+    const costVal = prompt('تكلفة العلبة الواحدة كام جنيه؟ (خامات + علبة + معلقة + استيكر + هالك)', state.settings.costPerBox);
+    if (costVal === null) return;
+    const cost = parseNumber(costVal);
+    if (isNaN(cost) || cost < 0) {
+      alert('من فضلك اكتب تكلفة صحيحة');
+      return;
+    }
+    commit(s => {
+      const prevSnapshot = JSON.parse(JSON.stringify(s.items));
+      const prevSettings = JSON.parse(JSON.stringify(s.settings));
+      s.settings.pricePerBox = price;
+      s.settings.costPerBox = Number(cost.toFixed(2));
+      s.history.unshift({
+        type: 'edit',
+        text: `تعديل السعر والتكلفة: بيع ${formatNum(price)} ج.م، تكلفة ${formatNum(s.settings.costPerBox)} ج.م للعلبة`,
+        time: new Date().toLocaleString('ar-EG'),
+        snapshot: prevSnapshot,
+        settingsSnapshot: prevSettings
+      });
+    });
   }
 
   function addStock(id, amount, label) {
@@ -541,10 +634,15 @@
     commit(s => {
       const last = s.history.shift();
       s.items = last.snapshot;
+      if (last.settingsSnapshot) s.settings = last.settingsSnapshot;
       if (last.type === 'produce') {
         s.totalProduced = Math.max(0, s.totalProduced - last.count);
+        if (typeof last.profit === 'number') {
+          s.totalProfit = Number((s.totalProfit - last.profit).toFixed(2));
+        }
       }
     });
+    document.getElementById('profitResult').style.display = 'none';
   }
 
   function resetTo60() {
@@ -557,6 +655,7 @@
       s.items = normalize({ items: JSON.parse(JSON.stringify(INITIAL_ITEMS)) }).items;
       s.items.forEach(i => { if (oldPacks[i.id]) i.packs = oldPacks[i.id]; });
       s.totalProduced = 0;
+      s.totalProfit = 0;
       s.history = [{
         type: 'reset',
         text: 'إعادة ضبط المخزون الابتدائي (60 علبة)',
@@ -628,7 +727,15 @@
     document.getElementById('maxBoxes').textContent = `${minBoxes === Infinity ? 0 : minBoxes} علبة`;
     document.getElementById('limitingItem').textContent = limitingName ? `أقل خامة: ${limitingName}` : '';
     document.getElementById('totalProduced').textContent = `${state.totalProduced} علبة`;
-    document.getElementById('totalCost').textContent = `${(state.totalProduced * 55).toLocaleString('ar-EG')} ج.م`;
+    const { costPerBox, pricePerBox } = state.settings;
+    document.getElementById('totalCost').textContent = money(state.totalProduced * costPerBox);
+    document.getElementById('costSub').textContent = `على أساس ${formatNum(costPerBox)} ج.م للعلبة`;
+    const profitEl = document.getElementById('totalProfit');
+    profitEl.textContent = money(state.totalProfit);
+    profitEl.style.color = state.totalProfit < 0 ? 'var(--danger)' : 'var(--success)';
+    document.getElementById('profitSub').textContent = pricePerBox
+      ? `بيع ${formatNum(pricePerBox)} − تكلفة ${formatNum(costPerBox)} = ${formatNum(Number((pricePerBox - costPerBox).toFixed(2)))} ج.م ربح للعلبة`
+      : 'حدد سعر البيع من زرار ⚙️ السعر والتكلفة';
 
     const historyList = document.getElementById('historyList');
     historyList.innerHTML = '';
@@ -637,7 +744,8 @@
     } else {
       state.history.forEach(h => {
         const li = document.createElement('li');
-        const label = h.type === 'produce' ? `✅ إنتاج ${h.count} علبة تيراميسو`
+        const label = h.type === 'produce'
+                      ? `✅ إنتاج ${h.count} علبة تيراميسو` + (typeof h.profit === 'number' ? ` <small style="color:${h.profit < 0 ? 'var(--danger)' : 'var(--success)'};">(${h.profit < 0 ? 'خسارة' : 'ربح'} ${money(Math.abs(h.profit))})</small>` : '')
                     : h.type === 'edit' ? `✏️ ${escapeHtml(h.text)}`
                     : `📦 ${escapeHtml(h.text)}`;
         const by = h.by ? ` <small style="color:#8c5a3c;">(بواسطة ${h.by})</small>` : '';

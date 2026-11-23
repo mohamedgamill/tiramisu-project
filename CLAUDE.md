@@ -29,12 +29,16 @@ paste it in chat.
    - Push a history entry to the FRONT of `state.history` with `snapshot` = a deep copy of
      `state.items` BEFORE the change, `time` = Arabic-Egypt formatted local time, and
      `"by": "Claude"`.
-   - Types: `produce` (`count`; also subtract `perBox*count` from each item, floor at 0, and
-     add to `totalProduced`), `restock` (`text`: "إضافة <qty> <unit> (<name>)"), `edit`
+   - Types: `produce` (`count`, `price`, `cost`, `profit` = count*(price-cost), plus
+     `settingsSnapshot`; subtract `perBox*count` from each item, floor at 0, add `count` to
+     `totalProduced` and `profit` to `totalProfit`; tell the owner the net profit), `restock` (`text`: "إضافة <qty> <unit> (<name>)"), `edit`
      (`text`: "تعديل <name>: من <old> إلى <new> <unit>").
    - Round stock to 2 decimals. Keep history at most 300 entries.
 3. Before pushing, show the owner a short before → after summary; confirm first for anything
    destructive (resets, deleting items, big corrections).
 4. `python3 -I tools/site_data.py push <scratch>/data.json`. On CONFLICT, pull again and redo.
+
+State also has `totalProfit` and `settings: {pricePerBox, costPerBox}` (selling price and cost per
+box in EGP; cost defaults to 55).
 
 Item fields: `id, name, unit, perBox, stock, packs` where `packs` = `[{size, label}]` (quick-add pack sizes, user-editable in the UI). Older data may still have `packSize`/`packLabel`; the UI converts them to `packs` on load.
