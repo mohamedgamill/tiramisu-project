@@ -39,6 +39,6 @@ paste it in chat.
 4. `python3 -I tools/site_data.py push <scratch>/data.json`. On CONFLICT, pull again and redo.
 
 State also has `totalProfit` and `settings: {pricePerBox, costPerBox}` (selling price and cost per
-box in EGP; cost defaults to 53.8; box 6.5 + spoon 0.3 as of 2026-11-23).
+box in EGP; cost defaults to 54.76 per the CSV: box 6.5, spoon 0.3, cocoa 2 g at 195 EGP/500 g, coffee 2.22 estimate, +10% reserve; as of 2026-11-24). New ingredients added to INITIAL_ITEMS are auto-added to existing data with stock 0.
 
 Item fields: `id, name, unit, perBox, stock, packs` where `packs` = `[{size, label}]` (quick-add pack sizes, user-editable in the UI). Older data may still have `packSize`/`packLabel`; the UI converts them to `packs` on load.

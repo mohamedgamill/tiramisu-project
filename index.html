@@ -270,7 +270,8 @@
     { id: 'sugar', name: 'سكر', unit: 'جرام', perBox: 8, stock: 480, packSize: 1000, packLabel: '+ كيلو (1000 جم)' },
     { id: 'boxes', name: 'علب تيراميسو', unit: 'علبة', perBox: 1, stock: 60, packSize: 30, packLabel: '+ 30 علبة' },
     { id: 'spoons', name: 'معالق', unit: 'معلقة', perBox: 1, stock: 60, packSize: 30, packLabel: '+ 30 معلقة' },
-    { id: 'stickers', name: 'استيكرات البراند', unit: 'استيكر', perBox: 1, stock: 60, packSize: 30, packLabel: '+ 30 استيكر' }
+    { id: 'stickers', name: 'استيكرات البراند', unit: 'استيكر', perBox: 1, stock: 60, packSize: 30, packLabel: '+ 30 استيكر' },
+    { id: 'cocoa', name: 'كاكاو (رش على الوش)', unit: 'جرام', perBox: 2, stock: 120, packSize: 500, packLabel: 'نص كيلو (500 جم)' }
   ];
 
   // البيانات القديمة اللي كانت محفوظة في المتصفح (بتتنقل للسيرفر أول مرة بس)
@@ -290,9 +291,13 @@
   function normalize(s) {
     if (!s || !Array.isArray(s.items)) return s;
     if (!s.settings || typeof s.settings !== 'object') s.settings = {};
-    if (typeof s.settings.costPerBox !== 'number') s.settings.costPerBox = 53.8;
+    if (typeof s.settings.costPerBox !== 'number') s.settings.costPerBox = 54.76;
     if (typeof s.settings.pricePerBox !== 'number') s.settings.pricePerBox = null;
     if (typeof s.totalProfit !== 'number') s.totalProfit = 0;
+    // خامات اتضافت للبرنامج بعدين (زي الكاكاو): تتضاف للبيانات القديمة برصيد صفر
+    INITIAL_ITEMS.forEach(init => {
+      if (!s.items.some(i => i.id === init.id)) s.items.push({ ...JSON.parse(JSON.stringify(init)), stock: 0 });
+    });
     s.items.forEach(item => {
       if (!Array.isArray(item.packs)) {
         item.packs = item.packSize ? [{ size: item.packSize, label: item.packLabel || `${item.packSize} ${item.unit}` }] : [];
