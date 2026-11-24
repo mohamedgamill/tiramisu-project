@@ -177,6 +177,15 @@
       color: #14532d; padding: 14px 16px; border-radius: 12px; margin-bottom: 16px; line-height: 1.8;
     }
     .profit-result.loss { background: var(--danger-bg); border-color: #fecaca; border-right-color: var(--danger); color: #991b1b; }
+    .usage-box {
+      background: var(--card); border: 1px solid var(--border); border-right: 5px solid var(--accent);
+      padding: 14px 16px; border-radius: 12px; margin-bottom: 16px;
+    }
+    .usage-list { list-style: none; padding: 0; margin: 8px 0 0; display: grid;
+                  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 4px 16px; }
+    .usage-list li { padding: 4px 0; border-bottom: 1px dashed #f3f4f6; font-size: 0.92rem; }
+    .usage-list li.short { color: var(--danger); font-weight: 600; }
+    .profit-result .usage-list li { border-bottom-color: #bbf7d0; }
     .profit-result .big { font-size: 1.3rem; font-weight: bold; }
     .loading { text-align: center; padding: 40px 16px; color: var(--muted); }
     body.busy button { opacity: 0.6; pointer-events: none; }
@@ -229,7 +238,7 @@
   <div class="action-panel">
     <div class="input-group">
       <label for="producedInput"><strong>عملت كام علبة النهاردة؟</strong></label>
-      <input type="number" id="producedInput" min="1" placeholder="مثلاً: 5" />
+      <input type="number" id="producedInput" min="1" placeholder="مثلاً: 5" oninput="previewUsage()" />
       <button class="btn-primary" onclick="produceBoxes()">خصم من المخزون</button>
     </div>
     <div class="input-group">
@@ -239,6 +248,7 @@
     </div>
   </div>
 
+  <div id="usagePreview" class="usage-box" style="display:none;"></div>
   <div id="profitResult" class="profit-result" style="display:none;"></div>
 
   <div id="itemsGrid" class="items-grid"></div>
@@ -459,8 +469,42 @@
     });
     if (ok) {
       input.value = '';
+      document.getElementById('usagePreview').style.display = 'none';
       showProfit(count, price, cost, revenue, totalCost, profit);
     }
+  }
+
+  // يكتب الكمية بشكل سهل: 1500 جرام ← 1.5 كيلو (1500 جرام)
+  function friendlyAmount(amount, unit) {
+    const n = Number(amount.toFixed(2));
+    if (unit === 'جرام' && n >= 1000) return `${Number((n / 1000).toFixed(3))} كيلو (${formatNum(n)} جرام)`;
+    if (unit === 'مل' && n >= 1000) return `${Number((n / 1000).toFixed(3))} لتر (${formatNum(n)} مل)`;
+    return `${formatNum(n)} ${unit}`;
+  }
+
+  // قايمة الكميات اللي محتاجها عدد علب معيّن. checkStock = يعلّم الخامات اللي مش كفاية
+  function usageListHtml(count, checkStock) {
+    return '<ul class="usage-list">' + state.items.map(item => {
+      const need = item.perBox * count;
+      const short = checkStock && need > item.stock;
+      const missing = short ? ` ⚠️ ناقص ${friendlyAmount(need - item.stock, item.unit)}` : '';
+      return `<li class="${short ? 'short' : ''}">${escapeHtml(item.name)}: <strong>${friendlyAmount(need, item.unit)}</strong>${missing}</li>`;
+    }).join('') + '</ul>';
+  }
+
+  function previewUsage() {
+    const box = document.getElementById('usagePreview');
+    const count = parseNumber(document.getElementById('producedInput').value);
+    if (!state || !count || count <= 0) {
+      box.style.display = 'none';
+      return;
+    }
+    const shortCount = state.items.filter(i => i.perBox * count > i.stock).length;
+    box.innerHTML = `
+      🧾 <strong>علشان تعمل ${formatNum(count)} علبة هتحتاج:</strong>
+      ${usageListHtml(count, true)}
+      ${shortCount ? `<div style="color:var(--danger);margin-top:8px;font-weight:600;">⚠️ فيه ${shortCount} خامة مش كفاية في المخزون (باللون الأحمر)</div>` : ''}`;
+    box.style.display = 'block';
   }
 
   function showProfit(count, price, cost, revenue, totalCost, profit) {
@@ -468,6 +512,9 @@
     box.className = 'profit-result' + (profit < 0 ? ' loss' : '');
     box.innerHTML = `
       ✅ <strong>اتسجّل إنتاج ${formatNum(count)} علبة</strong><br>
+      🧾 <strong>اتصرف من المخزون:</strong>
+      ${usageListHtml(count, false)}
+      <div style="margin-top:10px;"></div>
       المبيعات: ${formatNum(count)} × ${money(price)} = <strong>${money(revenue)}</strong><br>
       التكلفة: ${formatNum(count)} × ${money(cost)} = <strong>${money(totalCost)}</strong><br>
       <span class="big">${profit < 0 ? '⚠️ خسارة' : '💰 صافي الربح'}: ${money(Math.abs(profit))}</span>`;
@@ -669,6 +716,7 @@
     if (!state) return;
     document.getElementById('loadingBox').style.display = 'none';
     document.getElementById('appContent').style.display = '';
+    previewUsage(); // لو المخزون اتغيّر وإنت كاتب عدد، القايمة تتحدّث
 
     const grid = document.getElementById('itemsGrid');
     const alertBox = document.getElementById('alertBox');
