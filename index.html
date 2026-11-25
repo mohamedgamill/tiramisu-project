@@ -263,7 +263,7 @@
 <script>
   const INITIAL_ITEMS = [
     { id: 'mascarpone', name: 'جبنة ماسكاربوني', unit: 'جرام', perBox: 45, stock: 2700, packSize: 225, packLabel: '+ عبوة (225 جم)' },
-    { id: 'biscuits', name: 'بسكوت ليدي فينجر', unit: 'بسكوتة', perBox: 2, stock: 120, packSize: 60, packLabel: '+ باكيت (60 بسكوتة)' },
+    { id: 'biscuits', name: 'بسكوت ليدي فينجر', unit: 'بسكوتة', perBox: 2, stock: 120, packs: [{ size: 12, label: 'صف (12 بسكوتة)' }, { size: 48, label: 'علبة 4 صفوف (48 بسكوتة)' }] },
     { id: 'cream', name: 'كريمة خفق', unit: 'جرام', perBox: 10, stock: 600, packSize: 1000, packLabel: '+ كيلو (1000 جم)' },
     { id: 'yolks', name: 'صفار بيض', unit: 'صفارة', perBox: 0.4, stock: 24, packSize: 15, packLabel: '+ طبق (15 صفارة)' },
     { id: 'milk', name: 'لبن (حليب)', unit: 'مل', perBox: 20, stock: 1200, packSize: 1500, packLabel: '+ زجاجة (1.5 لتر)' },
@@ -292,7 +292,7 @@
   function normalize(s) {
     if (!s || !Array.isArray(s.items)) return s;
     if (!s.settings || typeof s.settings !== 'object') s.settings = {};
-    if (typeof s.settings.costPerBox !== 'number') s.settings.costPerBox = 56.28;
+    if (typeof s.settings.costPerBox !== 'number') s.settings.costPerBox = 58.65;
     if (typeof s.settings.pricePerBox !== 'number') s.settings.pricePerBox = null;
     if (typeof s.totalProfit !== 'number') s.totalProfit = 0;
     // خامات اتضافت للبرنامج بعدين (زي الكاكاو): تتضاف للبيانات القديمة برصيد صفر
@@ -304,6 +304,10 @@
         item.packs = item.packSize ? [{ size: item.packSize, label: item.packLabel || `${item.packSize} ${item.unit}` }] : [];
       }
       item.packs.forEach(p => { p.label = String(p.label).replace(/^\s*\+\s*/, ''); });
+      // البسكوت: الباكيت القديم (60) مكانش حقيقي؛ العلبة الحقيقية 4 صفوف × 12 = 48
+      if (item.id === 'biscuits' && item.packs.length === 1 && item.packs[0].size === 60 && /60 بسكوتة/.test(item.packs[0].label)) {
+        item.packs = [{ size: 12, label: 'صف (12 بسكوتة)' }, { size: 48, label: 'علبة 4 صفوف (48 بسكوتة)' }];
+      }
     });
     return s;
   }
